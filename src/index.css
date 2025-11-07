@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: oklch(98.5% 0.002 247.84);
+    --foreground: oklch(27.9% 0.041 260.03);
+
+    --card: oklch(100% 0 0);
+    --card-foreground: oklch(27.9% 0.041 260.03);
+
+    --popover: oklch(100% 0 0);
+    --popover-foreground: oklch(27.9% 0.041 260.03);
+
+    --primary: oklch(62.3% 0.214 259.82);
+    --primary-foreground: oklch(98% 0.01 260);
+
+    --secondary: oklch(92.9% 0.013 255.51);
+    --secondary-foreground: oklch(37.2% 0.044 257.29);
+
+    --muted: oklch(92.9% 0.013 255.51);
+    --muted-foreground: oklch(55.4% 0.046 257.42);
+
+    --accent: oklch(87.1% 0.15 154.45);
+    --accent-foreground: oklch(26.6% 0.065 152.93);
+
+    --destructive: oklch(63.7% 0.237 25.33);
+    --destructive-foreground: oklch(98% 0.01 260);
+
+    --border: oklch(92.9% 0.013 255.51);
+    --input: oklch(86.9% 0.022 252.89);
+    --ring: oklch(62.3% 0.214 259.82);
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: oklch(17% 0.02 255);
+    --foreground: oklch(92.9% 0.013 255.51);
+
+    --card: oklch(22% 0.025 256);
+    --card-foreground: oklch(92.9% 0.013 255.51);
+
+    --popover: oklch(17% 0.02 255);
+    --popover-foreground: oklch(92.9% 0.013 255.51);
+
+    --primary: oklch(62.3% 0.214 259.82);
+    --primary-foreground: oklch(98% 0.01 260);
+
+    --secondary: oklch(27.9% 0.041 260.03);
+    --secondary-foreground: oklch(98% 0.01 260);
+
+    --muted: oklch(27.9% 0.041 260.03);
+    --muted-foreground: oklch(70.4% 0.04 256.79);
+
+    --accent: oklch(52.7% 0.154 150.07);
+    --accent-foreground: oklch(98% 0.01 260);
+
+    --destructive: oklch(57.7% 0.245 27.33);
+    --destructive-foreground: oklch(98% 0.01 260);
+
+    --border: oklch(27.9% 0.041 260.03);
+    --input: oklch(27.9% 0.041 260.03);
+    --ring: oklch(62.3% 0.214 25_9.82);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-balance;
+  }
+
+  p {
+    @apply text-pretty;
+  }
+}

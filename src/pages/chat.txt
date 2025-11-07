@@ -1,0 +1,248 @@
+import React from 'react';
+import { Header } from "../Header"
+import { ComNavBar } from "./ComNavBar"
+import {useState,useEffect} from 'react';
+import {io} from 'socket.io-client';
+import {useLocation} from 'react-router-dom';
+import styles from "./ComCSS.module.css"
+import {Identicon} from "../Identicon"
+import { CommunityUse } from './CommunityUse';
+import { AiOutlineSend } from "react-icons/ai";
+import {db,get,ref,child} from "../firebaseConfig";
+const socket=io("http://localhost:3000");
+//const socket=io();
+export const ComChat=()=>{
+    const {comData}=CommunityUse();
+    const location = useLocation();
+    const roomName = location.state;
+    const [sentMessages, setSentMessages] = useState([]);
+    const [receivedMessages, setReceivedMessages] = useState([]);
+    const [combinedMessages, setCombinedMessages] = useState([]);
+    const [inputText, setInputText] = useState("");
+    const [userData,setUserData]=useState({});
+    function handleInputChange(e) {
+        setInputText(e.target.value);
+    }
+    useEffect(() => {
+        const fetchUserData=async ()=>{
+            try{
+                const res=await fetch("/api/user/userdata",{
+                    method:'POST',
+                    headers:{
+                        'Content-Type':'application/json',
+                    },
+                    body:JSON.stringify({uid:sessionStorage.getItem("uid")}),
+                });
+
+                if(!res.ok){
+                    throw new Error("Failed To Fetch User Data");
+                }
+                const result=await res.json();
+                const UD=result.userData;
+                setUserData(UD);
+            }catch(error){
+                console.log("Error Fetching Data : "+error);
+            }
+        }
+        fetchUserData();
+    }, []);
+    useEffect(() => {
+        const roomRef = ref(db);
+        const fetchMessages = async () => {
+            try {
+                const snapshot = await get(child(roomRef, `rooms/${comData.id}/messages`));
+                if (snapshot.exists()) {
+                    const messagesObj = snapshot.val();
+                    const messagesArray = Object.values(messagesObj);
+                    messagesArray.sort((a, b) => new Date(a.time) - new Date(b.time));
+                    const currentUid=sessionStorage.getItem("uid");
+                    const sent = [];
+                    const received = [];
+                    messagesArray.forEach(msg => {
+                        if (msg.uid == currentUid) {
+                            sent.push(msg);
+                        } else {
+                            received.push(msg);
+                        }
+                    });
+                    setSentMessages(sent);
+                    setReceivedMessages(received);
+                }
+            } catch (error) {
+                console.error("Error fetching messages from Firebase:", error);
+            }
+        };
+        fetchMessages();
+        socket.emit("joinRoom", comData.id);
+        socket.on("receiveMessage", (messageData) => {
+            setReceivedMessages((prev) => [...prev, messageData]);
+        });
+        return () => {
+            socket.off("receiveMessage");
+            socket.off("joinRoom");
+        };
+    }, [roomName]);
+    function handleSendMessage(e) {
+        e.preventDefault();
+        const messageObject = {
+            section: "messages",
+            text: inputText,
+            time: new Date().toISOString(),
+            uid:sessionStorage.getItem("uid"),
+            uname:userData.name,
+        };
+        socket.emit("sendMessage", messageObject);
+        setSentMessages((prev) => [...prev, messageObject]);
+        setInputText("");
+    }
+    useEffect(() => {
+        const allMessages = [...sentMessages, ...receivedMessages];
+        allMessages.sort((a, b) => new Date(a.time) - new Date(b.time));
+        setCombinedMessages(allMessages);
+    }, [sentMessages, receivedMessages]);
+
+    return(
+        <>
+        <Header/>
+        <ComNavBar/>
+        <main className={styles["SideBar-main-content"]}>
+            <div className={styles["chat-container"]}>
+            <div className={styles["chat-messages"]}>
+                {combinedMessages.map((msg, index) => {
+                    const isSentByUser = sentMessages.includes(msg);
+                    return (
+                        <div
+                            key={index}
+                            className={isSentByUser ? styles["message-outgoing"] : styles["message-incoming"]}>
+                            <div className={isSentByUser ? styles["bubble-outgoing"] : styles["bubble-incoming"]}>
+                                <div className={isSentByUser?styles.senderChatProfile:styles.receiverChatProfile}>
+                                    <Identicon seed={msg.uid} size={20}/>
+                                    {msg.uname}
+                                </div>
+                                {msg.text}
+                                <div className={styles["message-time"]}>
+                                <sub>
+                                    {msg.time && !isNaN(new Date(msg.time)) 
+                                        ? new Date(msg.time).toLocaleString() 
+                                        : "⏳"}
+                                </sub>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className={styles["chat-input-area"]}>
+                <input
+                    type="text"
+                    value={inputText}
+                    onChange={handleInputChange}
+                    placeholder="Type a message..."
+                />
+                <button onClick={handleSendMessage}>
+                <AiOutlineSend style={{fontSize:'3rem'}}/>
+                </button>
+            </div>
+        </div>
+        </main>
+        </>
+    )
+}
+
+------------------------------------------------------------------------------------------------------
+
+import { rtdb } from "../config/firebaseConfig.js";
+import admin from 'firebase-admin';
+import { getNotifyUsers, getCommunityName } from "../controllers/comController.js";
+
+export default function socketHandler(io) {
+    io.on("connection", (socket) => {
+        console.log("🟢 A user connected");
+
+        socket.on("joinRoom", (roomName) => {
+            socket.join(roomName);
+            console.log(`👤 ${socket.id} joined room: ${roomName}`);
+
+            // === VIDEO CALL SIGNALING ===
+            // When a user starts streaming (sends offer)
+            socket.on("video-offer", (data) => {
+                console.log(`📡 Offer from ${socket.id} to room ${data.roomName}`);
+                socket.to(data.roomName).emit("video-offer", {
+                    signal: data.signal,
+                    from: socket.id,
+                });
+            });
+
+            // When another user answers the offer
+            socket.on("video-answer", (data) => {
+                console.log(`📡 Answer from ${socket.id} to room ${data.roomName}`);
+                socket.to(data.roomName).emit("video-answer", {
+                    signal: data.signal,
+                    from: socket.id,
+                });
+            });
+
+            // ICE candidates for WebRTC
+            socket.on("video-candidate", (data) => {
+                socket.to(data.roomName).emit("video-candidate", {
+                    candidate: data.candidate,
+                    from: socket.id,
+                });
+            });
+
+            // === CHAT MESSAGE HANDLER (unchanged) ===
+            socket.on("sendMessage", async ({ section = "messages", notify = "help", ...messageData }) => {
+                const messageWithTimestamp = {
+                    ...messageData,
+                    time: new Date().toISOString(),
+                };
+                const newMsgRef = rtdb.ref(`rooms/${roomName}/${section}`).push();
+                await newMsgRef.set(messageWithTimestamp);
+                socket.to(roomName).emit("receiveMessage", messageWithTimestamp);
+
+                if (section === "HE") {
+                    let title = "";
+                    let body = "";
+                    let ComName = await getCommunityName(roomName);
+                    const senderName = messageData.uname || "Anonymous";
+                    const messageText = messageData.text || "";
+                    if (notify === "help") {
+                        title = "🟡 Help Requested";
+                        body = `${senderName} needs help: "${messageText}" in ${ComName}`;
+                    } else if (notify === "emergency") {
+                        title = "🔴 EMERGENCY ALERT";
+                        body = `${senderName} reported an emergency: "${messageText}" in ${ComName}`;
+                    }
+
+                    if (title && body) {
+                        const targetTokens = await getNotifyUsers(roomName, messageData.uid);
+                        if (targetTokens.length > 0) {
+                            const messagePayload = { notification: { title, body } };
+                            sendNotifications(targetTokens, messagePayload);
+                        }
+                    }
+                }
+            });
+        });
+
+        socket.on("disconnect", () => {
+            console.log("🔴 A user disconnected");
+        });
+    });
+}
+
+async function sendNotifications(tokens, message) {
+    const promises = tokens.map(async (token) => {
+        try {
+            const response = await admin.messaging().send({
+                token: token,
+                notification: message.notification,
+            });
+            console.log(`Message sent to ${token}:`, response);
+        } catch (error) {
+            console.error(`Error sending message to ${token}:`, error);
+        }
+    });
+    await Promise.all(promises);
+}
